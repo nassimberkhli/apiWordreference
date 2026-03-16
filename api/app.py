@@ -8,12 +8,13 @@ from .scraper import fetch_translation
 app = Flask(__name__)
 CORS(app)
 
-# Limite par défaut : 30 requêtes par minute par IP
 limiter = Limiter(get_remote_address, app=app, default_limits=["30 per minute"])
+
 
 @app.route("/", methods=["GET"])
 def status():
     return jsonify({"status": "API is running"}), 200
+
 
 @app.route("/translate", methods=["GET"])
 @limiter.limit("10 per second")
@@ -25,17 +26,28 @@ def translate():
     if not word or not dict_code:
         return jsonify({"error": "Missing required parameters: 'word' and 'dict'"}), 400
 
-    translation, audio_links = fetch_translation(word, dict_code, specific_meanings)
+    print(f"[translate] word={word} dict={dict_code} meanings={specific_meanings}")
 
-    if not translation:
-        return jsonify({"error": "Translation not available at the moment."}), 503
+    try:
+        translation, audio_links = fetch_translation(word, dict_code, specific_meanings)
+        print(
+            f"[translate] translation_count={len(translation)} audio_count={len(audio_links)}"
+        )
 
-    return jsonify({
-        "translation": translation,
-        "audio_links": audio_links
-    })
+        if not translation:
+            return jsonify(
+                {
+                    "error": "Translation not available at the moment.",
+                    "debug": {
+                        "word": word,
+                        "dict": dict_code,
+                        "specific_meanings": specific_meanings,
+                        "translation_count": 0,
+                    },
+                }
+            ), 503
 
-# Ne pas inclure app.run() sur Vercel
-if __name__ == "__main__":
-    app.run(debug=True)
-
+        return jsonify({"translation": translation, "audio_links": audio_links})
+    except Exception as e:
+        print(f"[translate] exception: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
